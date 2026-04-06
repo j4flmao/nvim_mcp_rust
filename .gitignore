@@ -25,9 +25,7 @@ Thumbs.db
 *.log
 logs/
 
-# Neovim
-# (user-specific, don't commit)
-/lua/
+
 
 # Temporary files
 *.tmp
