@@ -8,6 +8,7 @@ local bufs = {}
 local spinner_timer = nil
 local spinner_idx = 0
 local spinner_chars = { "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" }
+local current_on_submit = nil  -- persisted callback for multi-turn
 
 local function calc_layout()
   local ok, layout = pcall(function()
@@ -83,6 +84,8 @@ function M.open(on_submit, sess)
   if state ~= "idle" then
     M.close()
   end
+
+  current_on_submit = on_submit
 
   local layout = calc_layout()
   local ui_cfg = (require("nvim-mcp").config or {}).ui or {}
@@ -219,14 +222,34 @@ function M.open(on_submit, sess)
 
   state = "prompt"
 
-  -- Keymaps: prompt
+  -- Keymaps: prompt (works in both "prompt" and "done" states for multi-turn)
   vim.keymap.set("i", "<CR>", function()
-    if state ~= "prompt" then return end
+    if state ~= "prompt" and state ~= "done" then return end
     local line = vim.api.nvim_buf_get_lines(bufs.prompt, 0, 1, false)[1] or ""
     local query = line:gsub("^>%s*", "")
     if query == "" then return end
-    if on_submit then
-      on_submit(query)
+    -- Reset prompt for next turn
+    vim.bo[bufs.prompt].modifiable = true
+    vim.api.nvim_buf_set_lines(bufs.prompt, 0, -1, false, { "> " })
+    vim.api.nvim_win_set_cursor(wins.prompt, { 1, 2 })
+    state = "prompt"
+    if current_on_submit then
+      current_on_submit(query)
+    end
+  end, { buffer = bufs.prompt, nowait = true, desc = "MCP submit" })
+
+  -- Normal mode <CR> in prompt also submits
+  vim.keymap.set("n", "<CR>", function()
+    if state ~= "prompt" and state ~= "done" then return end
+    local line = vim.api.nvim_buf_get_lines(bufs.prompt, 0, 1, false)[1] or ""
+    local query = line:gsub("^>%s*", "")
+    if query == "" then return end
+    vim.bo[bufs.prompt].modifiable = true
+    vim.api.nvim_buf_set_lines(bufs.prompt, 0, -1, false, { "> " })
+    vim.api.nvim_win_set_cursor(wins.prompt, { 1, 2 })
+    state = "prompt"
+    if current_on_submit then
+      current_on_submit(query)
     end
   end, { buffer = bufs.prompt, nowait = true, desc = "MCP submit" })
 
@@ -499,9 +522,15 @@ function M.stop_streaming()
     })
   end
 
-  -- Focus response window
-  if wins.response and vim.api.nvim_win_is_valid(wins.response) then
-    vim.api.nvim_set_current_win(wins.response)
+  -- Reset prompt for next turn and focus it so user can keep chatting
+  if bufs.prompt and vim.api.nvim_buf_is_valid(bufs.prompt) then
+    vim.bo[bufs.prompt].modifiable = true
+    vim.api.nvim_buf_set_lines(bufs.prompt, 0, -1, false, { "> " })
+  end
+  if wins.prompt and vim.api.nvim_win_is_valid(wins.prompt) then
+    vim.api.nvim_set_current_win(wins.prompt)
+    vim.api.nvim_win_set_cursor(wins.prompt, { 1, 2 })
+    vim.cmd("startinsert!")
   end
 end
 
@@ -605,11 +634,58 @@ function M.close()
   wins = {}
   bufs = {}
   state = "idle"
+  current_on_submit = nil
   vim.cmd("stopinsert")
 end
 
 function M.is_open()
   return state ~= "idle"
+end
+
+function M.set_prompt(text)
+  if not bufs.prompt or not vim.api.nvim_buf_is_valid(bufs.prompt) then
+    return
+  end
+  vim.bo[bufs.prompt].modifiable = true
+  vim.api.nvim_buf_set_lines(bufs.prompt, 0, -1, false, { "> " .. text })
+  if wins.prompt and vim.api.nvim_win_is_valid(wins.prompt) then
+    vim.api.nvim_set_current_win(wins.prompt)
+    vim.api.nvim_win_set_cursor(wins.prompt, { 1, #text + 2 })
+    vim.cmd("startinsert!")
+  end
+end
+
+function M.restore_conversation(messages)
+  if not bufs.response or not vim.api.nvim_buf_is_valid(bufs.response) then
+    return
+  end
+
+  local lines = {}
+  for _, msg in ipairs(messages) do
+    if msg.role == "user" then
+      table.insert(lines, "▸ You:")
+      for _, l in ipairs(vim.split(msg.content, "\n", { plain = true })) do
+        table.insert(lines, "  " .. l)
+      end
+    else
+      table.insert(lines, "")
+      for _, l in ipairs(vim.split(msg.content, "\n", { plain = true })) do
+        table.insert(lines, l)
+      end
+    end
+    table.insert(lines, "")
+    table.insert(lines, "---")
+    table.insert(lines, "")
+  end
+
+  vim.bo[bufs.response].modifiable = true
+  vim.api.nvim_buf_set_lines(bufs.response, 0, -1, false, lines)
+  vim.bo[bufs.response].modifiable = false
+
+  if wins.response and vim.api.nvim_win_is_valid(wins.response) then
+    local count = vim.api.nvim_buf_line_count(bufs.response)
+    vim.api.nvim_win_set_cursor(wins.response, { count, 0 })
+  end
 end
 
 return M

@@ -162,7 +162,8 @@ function M.get_messages_for_display()
       index   = i,
       role    = msg.role,
       content = msg.content,
-      preview = "[" .. prefix .. "] " .. preview,
+      label   = string.format("#%d [%s] %s", i, prefix, preview),
+      hint    = msg.timestamp or "",
     })
   end
   return list
@@ -170,24 +171,19 @@ end
 
 function M.revert_to(index)
   if not current then return false end
-  if index < 1 or index > #current.messages then return false end
+  if index > #current.messages then return false end
   
+  if index < 1 then
+    current.messages = {}
+    return true
+  end
+
   local new_messages = {}
   for i = 1, index do
     table.insert(new_messages, current.messages[i])
   end
-  
   current.messages = new_messages
-  
-  local last_user_idx = 0
-  for i = #current.messages, 1, -1 do
-    if current.messages[i].role == "user" then
-      last_user_idx = i
-      break
-    end
-  end
-  
-  return last_user_idx > 0 and current.messages[last_user_idx].content or ""
+  return true
 end
 
 function M.update_message(index, new_content)

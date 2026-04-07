@@ -74,6 +74,10 @@ function M.register()
     mcp.revert()
   end, { desc = "Revert to a previous message" })
 
+  vim.api.nvim_create_user_command("MCPMessages", function()
+    mcp.show_messages()
+  end, { desc = "View all messages in current session" })
+
   vim.api.nvim_create_user_command("MCPStatus", function()
     mcp.status()
   end, { desc = "Show full status: provider, model, tokens, cost" })

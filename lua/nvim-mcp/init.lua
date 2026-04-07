@@ -121,13 +121,15 @@ function M.ask(query)
 
   if query then
     session.ensure()
-    ui.open(function() end, session.get())
+    if not ui.is_open() then
+      ui.open(function(q) do_ask(q) end, session.get())
+    end
     do_ask(query)
   else
     session.ensure()
-    ui.open(function(q)
-      do_ask(q)
-    end, session.get())
+    if not ui.is_open() then
+      ui.open(function(q) do_ask(q) end, session.get())
+    end
   end
 end
 
@@ -332,32 +334,161 @@ function M.show_history()
   local picker = require("nvim-mcp.ui.picker")
   local history_list = session.get_history_list()
 
-  if #history_list == 0 then
+  -- Mark current session if exists
+  local current = session.get()
+  local current_id = current and current.id or nil
+
+  if #history_list == 0 and not current_id then
     vim.notify("nvim-mcp: no history yet", vim.log.levels.INFO)
     return
   end
 
   local items = {}
-  for i, h in ipairs(history_list) do
-    local preview = h.preview or "(no preview)"
+
+  -- Show current session first if it has messages
+  if current and current.messages and #current.messages > 0 then
+    local first_msg = ""
+    for _, msg in ipairs(current.messages) do
+      if msg.role == "user" then
+        first_msg = msg.content:sub(1, 50)
+        if #msg.content > 50 then first_msg = first_msg .. "..." end
+        break
+      end
+    end
     table.insert(items, {
-      label = "[" .. h.created_at .. "] " .. preview,
-      value = i,
-      hint  = #h.messages .. " messages",
+      label = "★ [CURRENT] " .. first_msg,
+      hint  = #current.messages .. " msgs",
+      value = { type = "current" },
     })
   end
 
+  -- Show saved sessions
+  for i, h in ipairs(history_list) do
+    local preview = h.preview or "(no preview)"
+    local is_current = (h.id == current_id)
+    if not is_current then
+      table.insert(items, {
+        label = string.format("[%s] %s", h.created_at or "?", preview),
+        hint  = #h.messages .. " msgs",
+        value = { type = "saved", index = i },
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("nvim-mcp: no history yet", vim.log.levels.INFO)
+    return
+  end
+
   picker.open({
-    title = " MCP History ",
+    title = " MCP Sessions — pick to browse ",
     items = items,
     on_select = function(item)
-      local loaded = session.load_session(item.value)
-      if loaded then
-        vim.notify("nvim-mcp: loaded session from " .. loaded.created_at, vim.log.levels.INFO)
-        M.ask()
+      if item.value.type == "current" then
+        M._browse_session_messages(current.messages, "Current Session", true)
+      else
+        local entry = history_list[item.value.index]
+        if entry then
+          M._browse_session_messages(entry.messages, entry.created_at or entry.id, false, item.value.index)
+        end
       end
     end,
   })
+end
+
+-- Browse messages inside a session, then option to load it
+function M._browse_session_messages(messages, session_label, is_current, history_index)
+  if not messages or #messages == 0 then
+    vim.notify("nvim-mcp: session is empty", vim.log.levels.INFO)
+    return
+  end
+
+  -- Build conversation view in a floating window
+  local lines = {
+    "# Session: " .. session_label,
+    "",
+  }
+
+  for i, msg in ipairs(messages) do
+    if msg.role == "user" then
+      table.insert(lines, string.format("### #%d ▸ You", i))
+    else
+      table.insert(lines, string.format("### #%d ◂ AI", i))
+    end
+    table.insert(lines, "")
+    for _, l in ipairs(vim.split(msg.content, "\n", { plain = true })) do
+      table.insert(lines, l)
+    end
+    table.insert(lines, "")
+    table.insert(lines, "---")
+    table.insert(lines, "")
+  end
+
+  if is_current then
+    table.insert(lines, "Press `q` to close, `b` to go back to session list")
+  else
+    table.insert(lines, "Press `l` to load & continue, `b` to go back, `q` to close")
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].filetype = "markdown"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+
+  local width = math.min(90, vim.o.columns - 4)
+  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.85))
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative  = "editor",
+    width     = width,
+    height    = height,
+    row       = math.floor((vim.o.lines - height) / 2),
+    col       = math.floor((vim.o.columns - width) / 2),
+    border    = "rounded",
+    title     = string.format(" Session: %s (%d msgs) ", session_label, #messages),
+    title_pos = "center",
+    style     = "minimal",
+  })
+
+  vim.wo[win].wrap = true
+  vim.wo[win].linebreak = true
+  vim.wo[win].conceallevel = 2
+
+  vim.keymap.set("n", "q", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, nowait = true })
+  vim.keymap.set("n", "<Esc>", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, nowait = true })
+
+  -- Back to session list
+  vim.keymap.set("n", "b", function()
+    vim.api.nvim_win_close(win, true)
+    M.show_history()
+  end, { buffer = buf, nowait = true, desc = "Back to sessions" })
+
+  -- Load session (only for saved, not current)
+  if not is_current and history_index then
+    vim.keymap.set("n", "l", function()
+      vim.api.nvim_win_close(win, true)
+      local session = require("nvim-mcp.session")
+      local ui = require("nvim-mcp.ui")
+      local loaded = session.load_session(history_index)
+      if loaded then
+        vim.notify("nvim-mcp: loaded session — continue chatting", vim.log.levels.INFO)
+        if ui.is_open() then
+          ui.close()
+        end
+        session.ensure()
+        ui.open(function(q) M.ask(q) end, session.get())
+        local msgs = session.get_messages()
+        if #msgs > 0 then
+          ui.restore_conversation(msgs)
+        end
+      end
+    end, { buffer = buf, nowait = true, desc = "Load & continue" })
+  end
 end
 
 function M.revert()
@@ -365,27 +496,121 @@ function M.revert()
   local picker = require("nvim-mcp.ui.picker")
   local ui = require("nvim-mcp.ui")
   
-  local messages = session.get_messages_for_display()
+  local all_msgs = session.get_messages_for_display()
   
-  if #messages == 0 then
+  -- Only show user messages in picker
+  local user_items = {}
+  for _, msg in ipairs(all_msgs) do
+    if msg.role == "user" then
+      table.insert(user_items, msg)
+    end
+  end
+
+  if #user_items == 0 then
     vim.notify("nvim-mcp: no messages to revert", vim.log.levels.INFO)
     return
   end
 
   picker.open({
-    title = " MCP Revert - Select message to revert to ",
-    items = messages,
+    title = " MCP Revert - Pick your message to undo ",
+    items = user_items,
     on_select = function(item)
-      local content = session.revert_to(item.index)
-      if content then
-        vim.notify("nvim-mcp: reverted to message " .. item.index, vim.log.levels.INFO)
+      local revert_idx = item.index - 1
+      local removed = #all_msgs - math.max(revert_idx, 0)
+      local preview = item.content:sub(1, 50)
+      if #item.content > 50 then preview = preview .. "..." end
+
+      local confirm_msg = string.format(
+        "Revert from message #%d?\n\n\"%s\"\n\nThis will DELETE %d message(s) after this point.\nThis action cannot be undone.",
+        item.index, preview, removed
+      )
+
+      vim.ui.select({ "Yes — Revert", "No — Cancel" }, {
+        prompt = confirm_msg,
+      }, function(choice)
+        if not choice or choice:match("^No") then
+          vim.notify("nvim-mcp: revert cancelled", vim.log.levels.INFO)
+          return
+        end
+
+        if revert_idx < 1 then
+          session.revert_to(0)
+        else
+          session.revert_to(revert_idx)
+        end
+
+        vim.notify(
+          string.format("nvim-mcp: reverted — removed %d message(s) from #%d onward", removed, item.index),
+          vim.log.levels.INFO
+        )
+
+        local original_content = item.content
+
         if ui.is_open() then
           ui.close()
         end
-        M.ask(content)
-      end
+        session.ensure()
+        ui.open(function(q) M.ask(q) end, session.get())
+        local remaining = session.get_messages()
+        if #remaining > 0 then
+          ui.restore_conversation(remaining)
+        end
+        -- Pre-fill prompt with original message so user can edit and re-send
+        ui.set_prompt(original_content)
+      end)
     end,
   })
+end
+
+function M.show_messages()
+  local session = require("nvim-mcp.session")
+  local messages = session.get_messages_for_display()
+
+  if #messages == 0 then
+    vim.notify("nvim-mcp: no messages in current session", vim.log.levels.INFO)
+    return
+  end
+
+  local lines = { "# Current Session Messages", "" }
+  for _, msg in ipairs(messages) do
+    local prefix = msg.role == "user" and "▸ You" or "◂ AI"
+    local time = msg.hint ~= "" and (" [" .. msg.hint .. "]") or ""
+    table.insert(lines, string.format("### #%d %s%s", msg.index, prefix, time))
+    table.insert(lines, "")
+    for _, l in ipairs(vim.split(msg.content, "\n", { plain = true })) do
+      table.insert(lines, l)
+    end
+    table.insert(lines, "")
+    table.insert(lines, "---")
+    table.insert(lines, "")
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].filetype = "markdown"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+
+  local width = math.min(90, vim.o.columns - 4)
+  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.85))
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative  = "editor",
+    width     = width,
+    height    = height,
+    row       = math.floor((vim.o.lines - height) / 2),
+    col       = math.floor((vim.o.columns - width) / 2),
+    border    = "rounded",
+    title     = string.format(" Messages (%d) ", #messages),
+    title_pos = "center",
+    style     = "minimal",
+  })
+
+  vim.wo[win].wrap = true
+  vim.wo[win].linebreak = true
+  vim.wo[win].conceallevel = 2
+  vim.keymap.set("n", "q", function() vim.api.nvim_win_close(win, true) end, { buffer = buf })
+  vim.keymap.set("n", "<Esc>", function() vim.api.nvim_win_close(win, true) end, { buffer = buf })
 end
 
 function M.status()
