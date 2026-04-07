@@ -37,6 +37,7 @@ M.defaults = {
     swap     = "<leader>ms",
     new_chat = "<leader>mn",
     model    = "<leader>mm",
+    pick     = "<leader>my",
   },
 
   log = {

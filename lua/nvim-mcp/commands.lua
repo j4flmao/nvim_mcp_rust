@@ -66,6 +66,10 @@ function M.register()
     mcp.session_info()
   end, { desc = "Show session info, tokens, cost stats" })
 
+  vim.api.nvim_create_user_command("MCPPick", function()
+    mcp.pick_session()
+  end, { desc = "Pick a session to load" })
+
   vim.api.nvim_create_user_command("MCPHistory", function()
     mcp.show_history()
   end, { desc = "Show and load chat history" })

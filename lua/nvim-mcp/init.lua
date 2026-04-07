@@ -38,6 +38,11 @@ function M.setup(opts)
         M.new_chat()
       end, { desc = "MCP New Chat" })
     end
+    if keys.pick then
+      vim.keymap.set("n", keys.pick, function()
+        M.pick_session()
+      end, { desc = "MCP Pick Session" })
+    end
     if keys.model then
       vim.keymap.set("n", keys.model, "<cmd>MCPModel<cr>", { desc = "MCP Switch Model" })
     end
@@ -140,7 +145,93 @@ function M.new_chat()
     ui.close()
   end
   session.clear()
+  session.ensure()
   vim.notify("nvim-mcp: new chat session", vim.log.levels.INFO)
+end
+
+function M.pick_session()
+  local session = require("nvim-mcp.session")
+  local picker = require("nvim-mcp.ui.picker")
+  local history_list = session.get_history_list()
+  local current = session.get()
+  local current_id = current and current.id or nil
+
+  local items = {}
+
+  if current and current.messages and #current.messages > 0 then
+    local first_msg = ""
+    for _, msg in ipairs(current.messages) do
+      if msg.role == "user" then
+        first_msg = msg.content:sub(1, 50)
+        if #msg.content > 50 then first_msg = first_msg .. "..." end
+        break
+      end
+    end
+    table.insert(items, {
+      label = "★ [CURRENT] " .. first_msg,
+      hint  = #current.messages .. " msgs",
+      value = { type = "current" },
+    })
+  end
+
+  for i, h in ipairs(history_list) do
+    local preview = h.preview or "(no preview)"
+    local is_current = (h.id == current_id)
+    if not is_current then
+      table.insert(items, {
+        label = string.format("[%s] %s", h.created_at or "?", preview),
+        hint  = #h.messages .. " msgs",
+        value = { type = "saved", index = i },
+      })
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("nvim-mcp: no sessions yet. Use :MCPNew to start.", vim.log.levels.INFO)
+    return
+  end
+
+  picker.open({
+    title = " MCP Sessions — pick to load ",
+    items = items,
+    on_select = function(item)
+      local sess_data
+      if item.value.type == "current" then
+        sess_data = current
+      else
+        sess_data = history_list[item.value.index]
+      end
+
+      if not sess_data then return end
+
+      vim.ui.select({ "Continue Chatting", "View History" }, {
+        prompt = "Session: " .. (sess_data.created_at or sess_data.id),
+      }, function(choice)
+        if not choice then return end
+
+        if choice:match("Continue") then
+          if item.value.type == "saved" then
+            session.load_session(item.value.index)
+          else
+            session.ensure()
+          end
+          local ui = require("nvim-mcp.ui")
+          if ui.is_open() then ui.close() end
+          ui.open(function(q) M.ask(q) end, session.get())
+          local msgs = session.get_messages()
+          if #msgs > 0 then
+            ui.restore_conversation(msgs)
+          end
+          local resp_lines = session.get().response_lines
+          if resp_lines and #resp_lines > 0 then
+            ui.restore_response_lines(resp_lines)
+          end
+        else
+          M._browse_session_messages(sess_data.messages, sess_data.created_at or sess_data.id, item.value.type == "current", item.value.index)
+        end
+      end)
+    end,
+  })
 end
 
 function M.context()
@@ -485,6 +576,10 @@ function M._browse_session_messages(messages, session_label, is_current, history
         local msgs = session.get_messages()
         if #msgs > 0 then
           ui.restore_conversation(msgs)
+        end
+        local resp_lines = session.get().response_lines
+        if resp_lines and #resp_lines > 0 then
+          ui.restore_response_lines(resp_lines)
         end
       end
     end, { buffer = buf, nowait = true, desc = "Load & continue" })

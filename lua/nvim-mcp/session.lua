@@ -81,10 +81,11 @@ function M.save_to_file()
   local history = M.load_history()
   
   local session_entry = {
-    id         = current.id,
-    messages   = current.messages,
-    created_at = current.created_at,
-    saved_at   = vim.fn.strftime("%Y-%m-%d %H:%M:%S"),
+    id            = current.id,
+    messages      = current.messages,
+    response_lines = current.response_lines or {},
+    created_at    = current.created_at,
+    saved_at      = vim.fn.strftime("%Y-%m-%d %H:%M:%S"),
   }
   
   table.insert(history, 1, session_entry)
@@ -129,10 +130,10 @@ function M.load_session(index)
   if not entry then return nil end
   
   current = {
-    id           = entry.id,
-    messages     = entry.messages,
-    response_lines = {},
-    created_at   = entry.created_at,
+    id            = entry.id,
+    messages      = entry.messages,
+    response_lines = entry.response_lines or {},
+    created_at    = entry.created_at,
   }
   
   vim.notify("nvim-mcp: loaded session " .. current.id .. " with " .. #current.messages .. " messages", vim.log.levels.INFO)
@@ -175,6 +176,7 @@ function M.revert_to(index)
   
   if index < 1 then
     current.messages = {}
+    current.response_lines = {}
     return true
   end
 
@@ -183,6 +185,11 @@ function M.revert_to(index)
     table.insert(new_messages, current.messages[i])
   end
   current.messages = new_messages
+
+  if current.response_lines and #current.response_lines > 0 then
+    current.response_lines = {}
+  end
+
   return true
 end
 
@@ -195,7 +202,17 @@ function M.update_message(index, new_content)
   for i = #current.messages, index + 1, -1 do
     table.remove(current.messages, i)
   end
+
+  if current.response_lines then
+    current.response_lines = {}
+  end
   
+  return true
+end
+
+function M.update_response_lines(lines)
+  if not current then return false end
+  current.response_lines = lines or {}
   return true
 end
 

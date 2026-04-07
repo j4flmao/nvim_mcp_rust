@@ -294,6 +294,24 @@ function M.save_response_to_session()
   end
 end
 
+function M.restore_response_lines(lines)
+  if not bufs.response or not vim.api.nvim_buf_is_valid(bufs.response) then
+    return
+  end
+  if not lines or #lines == 0 then
+    return
+  end
+
+  vim.bo[bufs.response].modifiable = true
+  vim.api.nvim_buf_set_lines(bufs.response, 0, -1, false, lines)
+  vim.bo[bufs.response].modifiable = false
+
+  if wins.response and vim.api.nvim_win_is_valid(wins.response) then
+    local count = vim.api.nvim_buf_line_count(bufs.response)
+    vim.api.nvim_win_set_cursor(wins.response, { count, 0 })
+  end
+end
+
 function M.render_markdown()
   if not bufs.response or not vim.api.nvim_buf_is_valid(bufs.response) then
     return
