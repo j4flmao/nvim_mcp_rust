@@ -83,6 +83,7 @@ return {
     { "<leader>ms", "<cmd>MCPSwitch<cr>",                             desc = "MCP Switch" },
     { "<leader>mn", "<cmd>MCPNew<cr>",                               desc = "MCP New" },
     { "<leader>mm", "<cmd>MCPModel<cr>",                             desc = "MCP Model" },
+    { "<leader>my", "<cmd>MCPPick<cr>",                              desc = "MCP Pick" },
   },
   config = function()
     require("nvim-mcp").setup({})
@@ -119,6 +120,7 @@ cp target/release/nvim-mcp ~/.cargo/bin/
 | `:MCPHistory` | View and load old sessions |
 | `:MCPRevert` | Revert to a previous message |
 | `:MCPNew` | Start new chat (saves current) |
+| `:MCPPick` | Pick session to continue chatting |
 | `:MCPStatus` | Show full status |
 | `:MCPServers` | List MCP servers |
 | `:MCPRestart` | Restart binary |
@@ -136,6 +138,7 @@ cp target/release/nvim-mcp ~/.cargo/bin/
 | `<leader>ms` | Switch Connection |
 | `<leader>mn` | New Chat |
 | `<leader>mm` | Switch Model |
+| `<leader>my` | Pick Session |
 
 **In UI:**
 
@@ -187,17 +190,23 @@ Sessions save automatically when:
 - Starting new chat (`:MCPNew`)
 - Quitting Neovim
 
-### History
+### Pick Session (Continue Chatting)
+
+```bash
+:MCPPick        -- Pick session to continue or view history
+```
+
+When you pick a session, you'll be prompted to choose:
+- **Continue Chatting** — Load the session and continue from where you left off
+- **View History** — Browse messages in that session
+
+### Other Commands
 
 ```bash
 :MCPHistory    -- View and load old sessions
 :MCPRevert     -- Revert to a previous message
-```
-
-### New Chat
-
-```bash
 :MCPNew        -- Start fresh (current saved)
+:MCPSession    -- Show session info, tokens, cost stats
 ```
 
 ---
