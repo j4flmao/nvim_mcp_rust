@@ -71,6 +71,20 @@ return {
 }
 ```
 
+If your plugin manager stores the plugin in a different folder name (e.g., `nvim_mcp_rust` instead of `j4flmao_nvim_mcp_rust`), set the binary URL manually:
+
+```lua
+return {
+  "j4flmao/nvim_mcp_rust",
+  event = "VeryLazy",
+  config = function()
+    require("nvim-mcp").setup({
+      binary = "https://github.com/j4flmao/nvim_mcp_rust/releases/latest/nvim-mcp.exe"
+    })
+  end,
+}
+```
+
 ```lua
 -- With keymaps (optional)
 return {

@@ -52,7 +52,75 @@ local function binary_path()
     return path
   end
 
-  error("nvim-mcp: binary not found. Install the executable or set `binary` in config.")
+  return nil
+end
+
+local function get_platform()
+  local os = vim.fn.has("win32") == 1 and "windows" or vim.fn.has("mac") == 1 and "macos" or "linux"
+  local arch = vim.fn.has("aarch64") == 1 or vim.fn.has("arm64") == 1 and "arm64" or "x64"
+  return os, arch
+end
+
+local function get_binary_name()
+  local os, arch = get_platform()
+  if os == "windows" then
+    return "nvim-mcp.exe"
+  elseif os == "macos" then
+    return arch == "arm64" and "nvim-mcp-macos-arm64" or "nvim-mcp-macos-x64"
+  else
+    return arch == "arm64" and "nvim-mcp-linux-arm64" or "nvim-mcp-linux-x64"
+  end
+end
+
+local function download_binary(url, dest, callback)
+  local bin_dir = vim.fn.stdpath("data") .. "/nvim-mcp/bin"
+  vim.fn.mkdir(bin_dir, "p")
+
+  local curl = vim.fn.exepath("curl") or "curl"
+  local cmd = string.format('%s -L -o "%s" "%s"', curl, dest, url)
+
+  vim.fn.jobstart(cmd, {
+    on_exit = function(_, code)
+      if code == 0 then
+        vim.fn.setfperm(dest, "rxrxrxr-x")
+        vim.notify("nvim-mcp: downloaded binary to " .. dest, vim.log.levels.INFO)
+      else
+        vim.notify("nvim-mcp: failed to download binary", vim.log.levels.ERROR)
+      end
+      if callback then callback(code == 0) end
+    end
+  })
+end
+
+local function ensure_binary()
+  local path = binary_path()
+  if path then return path end
+
+  local src = debug.getinfo(1, "S").source:sub(2)
+  local plugin_root = vim.fn.fnamemodify(src, ":h:h:h:h")
+
+  local plugin_name = vim.fn.fnamemodify(plugin_root, ":t")
+  local base_url = "https://github.com/" .. plugin_name .. "/releases/latest"
+
+  if not plugin_name or plugin_name == "" then
+    error("nvim-mcp: cannot detect GitHub repo. Set `binary` in config.")
+  end
+
+  local binary_name = get_binary_name()
+  local url = base_url .. "/" .. binary_name
+  local dest = vim.fn.stdpath("data") .. "/nvim-mcp/bin/" .. binary_name
+
+  vim.notify("nvim-mcp: auto-detected repo, downloading binary...", vim.log.levels.INFO)
+
+  download_binary(url, dest, function(success)
+    if success then
+      vim.defer_fn(function()
+        M.start()
+      end, 500)
+    end
+  end)
+
+  return nil
 end
 
 function M.binary_path()
@@ -149,11 +217,8 @@ end
 function M.start()
   if handle then return true end
 
-  local ok, bin = pcall(binary_path)
-  if not ok then
-    vim.schedule(function()
-      vim.notify("nvim-mcp: " .. bin, vim.log.levels.ERROR)
-    end)
+  local bin = ensure_binary()
+  if not bin then
     return false
   end
 
