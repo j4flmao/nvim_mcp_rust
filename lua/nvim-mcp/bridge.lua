@@ -32,21 +32,6 @@ local function binary_path()
     return config.binary
   end
 
-  local src = debug.getinfo(1, "S").source:sub(2)
-  local root = vim.fn.fnamemodify(src, ":h:h:h")
-
-  local ext = ""
-  if vim.fn.has("win32") == 1 then ext = ".exe" end
-
-  local candidates = {
-    vim.fn.stdpath("data") .. "/nvim-mcp/bin/nvim-mcp" .. ext,
-    root .. "/target/release/nvim-mcp" .. ext,
-    root .. "/target/debug/nvim-mcp" .. ext,
-  }
-  for _, p in ipairs(candidates) do
-    if vim.fn.executable(p) == 1 then return p end
-  end
-
   local path = vim.fn.exepath("nvim-mcp")
   if path ~= "" and vim.fn.executable(path) == 1 then
     return path
@@ -95,32 +80,7 @@ end
 local function ensure_binary()
   local path = binary_path()
   if path then return path end
-
-  local src = debug.getinfo(1, "S").source:sub(2)
-  local plugin_root = vim.fn.fnamemodify(src, ":h:h:h:h")
-
-  local plugin_name = vim.fn.fnamemodify(plugin_root, ":t")
-  local base_url = "https://github.com/" .. plugin_name .. "/releases/latest"
-
-  if not plugin_name or plugin_name == "" then
-    error("nvim-mcp: cannot detect GitHub repo. Set `binary` in config.")
-  end
-
-  local binary_name = get_binary_name()
-  local url = base_url .. "/" .. binary_name
-  local dest = vim.fn.stdpath("data") .. "/nvim-mcp/bin/" .. binary_name
-
-  vim.notify("nvim-mcp: auto-detected repo, downloading binary...", vim.log.levels.INFO)
-
-  download_binary(url, dest, function(success)
-    if success then
-      vim.defer_fn(function()
-        M.start()
-      end, 500)
-    end
-  end)
-
-  return nil
+  error("nvim-mcp: binary not found. Run: cargo install nvim-mcp-rust")
 end
 
 function M.binary_path()

@@ -58,10 +58,15 @@ No Node.js. No Python. Just a single Rust binary and Lua.
 
 ## Installation
 
-### Using lazy.nvim (Recommended)
+1. **Install the binary** (one-time):
+
+```bash
+cargo install nvim-mcp
+```
+
+2. **Add the plugin**:
 
 ```lua
--- Minimal setup - commands work via :MCP* (optional)
 return {
   "j4flmao/nvim_mcp_rust",
   event = "VeryLazy",
@@ -71,19 +76,7 @@ return {
 }
 ```
 
-If your plugin manager stores the plugin in a different folder name (e.g., `nvim_mcp_rust` instead of `j4flmao_nvim_mcp_rust`), set the binary URL manually:
-
-```lua
-return {
-  "j4flmao/nvim_mcp_rust",
-  event = "VeryLazy",
-  config = function()
-    require("nvim-mcp").setup({
-      binary = "https://github.com/j4flmao/nvim_mcp_rust/releases/latest/nvim-mcp.exe"
-    })
-  end,
-}
-```
+The plugin automatically finds the `nvim-mcp` command on your PATH.
 
 ```lua
 -- With keymaps (optional)
@@ -105,18 +98,15 @@ return {
 }
 ```
 
-**No need to build!** The binary is pre-built in GitHub Releases.
-
 ### Manual Installation
 
 ```bash
-# Clone to plugin directory
+# Clone the plugin
 git clone https://github.com/j4flmao/nvim_mcp_rust.git \
   ~/.local/share/nvim/site/pack/plugins/start/nvim-mcp
 
-# Build binary manually (requires Rust 1.94+)
-cargo build --release
-cp target/release/nvim-mcp ~/.cargo/bin/
+# Install the binary
+cargo install nvim-mcp
 ```
 
 ---

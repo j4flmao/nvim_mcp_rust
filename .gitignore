@@ -10,6 +10,10 @@ Cargo.lock
 *.so
 *.dylib
 
+# Binary bundle (keep these!)
+bin/
+!.gitignore
+
 # IDE
 .idea/
 .vscode/
