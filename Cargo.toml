@@ -1,5 +1,5 @@
 [package]
-name         = "nvim-mcp"
+name         = "nvim-mcp-rust"
 version      = "0.1.2"
 edition      = "2024"
 rust-version = "1.94"

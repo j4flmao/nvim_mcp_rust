@@ -61,7 +61,7 @@ No Node.js. No Python. Just a single Rust binary and Lua.
 1. **Install the binary** (one-time):
 
 ```bash
-cargo install nvim-mcp
+cargo install nvim-mcp-rust
 ```
 
 2. **Add the plugin**:
@@ -106,7 +106,7 @@ git clone https://github.com/j4flmao/nvim_mcp_rust.git \
   ~/.local/share/nvim/site/pack/plugins/start/nvim-mcp
 
 # Install the binary
-cargo install nvim-mcp
+cargo install nvim-mcp-rust
 ```
 
 ---
