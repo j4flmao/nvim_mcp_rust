@@ -3,6 +3,8 @@ name         = "nvim-mcp"
 version      = "0.1.2"
 edition      = "2024"
 rust-version = "1.94"
+description  = "Neovim AI assistant powered by Rust - Claude, OpenAI, Gemini, Ollama, LM Studio support"
+license      = "MIT"
 
 [[bin]]
 name = "nvim-mcp"
