@@ -32,9 +32,11 @@ local function binary_path()
     return config.binary
   end
 
-  local path = vim.fn.exepath("nvim-mcp")
-  if path ~= "" and vim.fn.executable(path) == 1 then
-    return path
+  for _, name in ipairs({ "nvim-mcp-rust", "nvim-mcp" }) do
+    local path = vim.fn.exepath(name)
+    if path ~= "" and vim.fn.executable(path) == 1 then
+      return path
+    end
   end
 
   return nil
